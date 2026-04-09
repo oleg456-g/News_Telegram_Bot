@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS messages (
     channel TEXT,
     message_id INTEGER,
     raw_text TEXT,
-    processed_text TEXT,
+    proceeded_text TEXT,
     label BOOL,
     PRIMARY KEY(channel, message_id)
 )
@@ -34,7 +34,7 @@ def prepare_text_for_tf_idf(text: str):
     text = re.sub(r"[@#]\w+", '', text)
     text = re.sub(r"[^\w\s]", '', text)
     words = text.split()
-    words = [w for w in words if not w.isdigit()]
+    words = [w for w in words if w not in stop_words and not w.isdigit()]
     words = [morph.parse(w)[0].normal_form for w in words]
 
     return " ".join(words)
@@ -65,7 +65,7 @@ async def main():
         async for message in get_messages:
             if message.text:
                 cursor.execute("""
-                            INSERT or IGNORE INTO messages (channel, message_id, raw_text, processed_text)
+                            INSERT or IGNORE INTO messages (channel, message_id, raw_text, proceeded_text)
                             VALUES (?, ?, ?, ?)
                 """, (
                     channel_username,
