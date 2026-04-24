@@ -28,10 +28,10 @@ conn.commit()
 #подготовка данных
 def prepare_text_for_tf_idf(text: str):
     text = text.lower()
-    text = emoji.replace_emoji(text, '')
-    text = re.sub(r"http\S+", '', text)
-    text = re.sub(r"[@#]\w+", '', text)
-    text = re.sub(r"[^\w\s]", '', text)
+    text = emoji.replace_emoji(text, ' ')
+    text = re.sub(r"http\S+", ' ', text)
+    text = re.sub(r"[@#]\w+", ' ', text)
+    text = re.sub(r"[^\w\s]", ' ', text)
     words = text.split()
     words = [w for w in words if w not in stop_words and not w.isdigit()]
     words = [morph.parse(w)[0].normal_form for w in words]
@@ -77,5 +77,5 @@ async def main():
                         prepare_text_for_tf_idf(message.text)
                     ))
             conn.commit()
-
-asyncio.run(main())
+if __name__ == '__main__':
+    asyncio.run(main())
