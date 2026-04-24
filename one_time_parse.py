@@ -75,8 +75,8 @@ async def main():
                     """, (
                         channel_username,
                         message.id,
-                        message.text,
-                        prepare_text_for_tf_idf(message.text)
+                        message.raw_text,
+                        prepare_text_for_tf_idf(message.raw_text)
                     ))
             conn.commit()
 
