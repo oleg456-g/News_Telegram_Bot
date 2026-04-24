@@ -4,14 +4,39 @@ from telethon import TelegramClient, events
 from telethon.tl.types import MessageMediaPhoto, MessageMediaDocument, DocumentAttributeVideo
 from telebot.types import InputMediaPhoto, InputMediaVideo
 from telethon.extensions import html
-import telebot, asyncio, threading, joblib, io
+from telebot.async_telebot import AsyncTeleBot
+import asyncio, threading, joblib, io, aiosqlite
 
 TIME_TO_FREEZE = 0.1
 MAX_MB = 20 * 1024 * 1024
+DB_PATH = 'bot_data.db'
 pipeline = joblib.load("model_pipeline.pkl")
-bot = telebot.TeleBot(SECRETEAPI)
-subscribers = set([1128560375])
+bot = AsyncTeleBot(SECRETEAPI)
 client = TelegramClient("bot_parser", APP_ID_HASH, APP_API_HASH)
+
+
+async def init_db():
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('CREATE TABLE IF NOT EXISTS subs (user_id INTEGER PRIMARY KEY)')
+        await db.commit()
+
+async def add_sub(user_id):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('INSERT OR IGNORE INTO subs (user_id) VALUES (?)', (user_id,))
+        await db.commit()
+
+
+async def remove_sub(user_id):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('DELETE FROM subs WHERE user_id = ?', (user_id,))
+        await db.commit()
+
+
+async def get_subs():
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute('SELECT user_id FROM subs') as cursor:
+            rows = await cursor.fetchall()
+            return [row[0] for row in rows]
 
 
 def is_politics(text):
@@ -53,12 +78,13 @@ async def album_handler(event):
                 media_group.append(InputMediaVideo(file_data, caption=caption_html if i == 0 else "", parse_mode='HTML'))
         
     if media_group:
-        for user_id in list(subscribers):
+        subscribers = await get_subs()
+        for user_id in subscribers:
             try:
                 await asyncio.sleep(TIME_TO_FREEZE)
                 for m in media_group:
                     m.media.seek(0)
-                bot.send_media_group(user_id, media_group)
+                await bot.send_media_group(user_id, media_group)
             except Exception as e:
                 print(f"Ошибка альбома для {user_id}: {e}")
 
@@ -84,50 +110,48 @@ async def handler(event):
                 for attr in message.media.document.attributes:
                     if hasattr(attr, 'file_name'):
                         file_data.name = attr.file_name
-
-    for user_id in list(subscribers):
+    subscribers = await get_subs()
+    for user_id in subscribers:
         try:
             await asyncio.sleep(TIME_TO_FREEZE)
             if file_data:
                 file_data.seek(0)
                 if isinstance(message.media, MessageMediaPhoto):
-                    bot.send_photo(user_id, photo=file_data, caption=text_html, parse_mode='HTML')
+                    await bot.send_photo(user_id, photo=file_data, caption=text_html, parse_mode='HTML')
                 elif isinstance(message.media, MessageMediaDocument):
                     is_video = check_for_video(message.media.document.attributes)
                     if is_video:
-                        bot.send_video(user_id, video=file_data, caption=text_html, parse_mode='HTML')
+                        await bot.send_video(user_id, video=file_data, caption=text_html, parse_mode='HTML')
                     else:
-                        bot.send_document(user_id, document=file_data, caption=text_html, parse_mode='HTML')
+                        await bot.send_document(user_id, document=file_data, caption=text_html, parse_mode='HTML')
             else:
-                bot.send_message(user_id, text_html, parse_mode='HTML')
+                await bot.send_message(user_id, text_html, parse_mode='HTML')
         except Exception as e:
             print(f"Ошибка сообщения для {user_id}: {e}")
 
 
 @bot.message_handler(commands=['start'])
-def start(message):
-    bot.send_message(message.chat.id, "Привет! Я присылаю новости без политики.\nНапиши /on чтобы получить сообщения в реальном времени из тг каналов и /off чтобы выключить.")
+async def start(message):
+    await bot.send_message(message.chat.id, "Привет! Я присылаю новости без политики.\nНапиши /on чтобы получить сообщения в реальном времени из тг каналов и /off чтобы выключить.")
 
 @bot.message_handler(commands=['on'])
-def turn_on(message):
-    subscribers.add(message.chat.id)
-    bot.send_message(message.chat.id, "✅ Подписка включена")
+async def turn_on(message):
+    await add_sub(message.chat.id)
+    await bot.send_message(message.chat.id, "✅ Подписка включена")
 
 @bot.message_handler(commands=['off'])
-def turn_off(message):
-    subscribers.discard(message.chat.id)
-    bot.send_message(message.chat.id, "❌ Подписка выключена")
+async def turn_off(message):
+    await remove_sub(message.chat.id)
+    await bot.send_message(message.chat.id, "❌ Подписка выключена")
 
 
-
-async def start_client():
+async def main():
+    await init_db()
     await client.start()
-    await client.run_until_disconnected()
+    await asyncio.gather(
+        client.run_until_disconnected(),
+        bot.polling(none_stop=True)
+    )
 
-
-def start_parser():
-    asyncio.run(start_client())
-
-threading.Thread(target=start_parser, daemon=True).start()
-
-bot.polling(none_stop=True, interval=0)
+if __name__ == '__main__':
+    asyncio.run(main())
