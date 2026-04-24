@@ -6,24 +6,26 @@ from secret import APP_API_HASH, APP_ID_HASH, DAYS_TO_PARSE, CHANNELS_NAMES_TO_P
 
 morph = pymorphy3.MorphAnalyzer()
 stop_words = set(stopwords.words("russian"))
-client = TelegramClient('parser_session', APP_ID_HASH, APP_API_HASH)
 
-#создание таблицы
-conn = sqlite3.connect("telegram_messages.db")
-cursor = conn.cursor()
 
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS messages (
-    channel TEXT,
-    message_id INTEGER,
-    raw_text TEXT,
-    proceeded_text TEXT,
-    label BOOL,
-    PRIMARY KEY(channel, message_id)
-)
-""")
+if __name__ == '__main__':
+    client = TelegramClient('parser_session', APP_ID_HASH, APP_API_HASH)
+    #создание таблицы
+    conn = sqlite3.connect("telegram_messages.db")
+    cursor = conn.cursor()
 
-conn.commit()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS messages (
+        channel TEXT,
+        message_id INTEGER,
+        raw_text TEXT,
+        proceeded_text TEXT,
+        label BOOL,
+        PRIMARY KEY(channel, message_id)
+    )
+    """)
+
+    conn.commit()
 
 #подготовка данных
 def prepare_text_for_tf_idf(text: str):
@@ -77,5 +79,7 @@ async def main():
                         prepare_text_for_tf_idf(message.text)
                     ))
             conn.commit()
+
+
 if __name__ == '__main__':
     asyncio.run(main())

@@ -1,4 +1,6 @@
 secret.py
 parser_session.session
+bot_parser.session
+bot_parser.session-journal
 venv
 __pycache__
